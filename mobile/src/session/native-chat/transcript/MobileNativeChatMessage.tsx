@@ -344,7 +344,11 @@ function MobileNativeChatMessageImpl({
             </>
           )}
           {backgroundTasks.map((task) => (
-            <MobileNativeChatBackgroundTaskRun key={task.taskId} block={task} />
+            <MobileNativeChatBackgroundTaskRun
+              key={task.taskId}
+              block={task}
+              fontScale={fontScale}
+            />
           ))}
           {askRow}
           {showToolRun ? (
