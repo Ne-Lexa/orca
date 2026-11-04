@@ -1916,6 +1916,7 @@
       "countWorkflows_one": "{{count}} процесс",
       "countWorkflows_other": "{{count}} процесса",
       "detailsUnavailable": "Подробности задач в этой сессии недоступны.",
+      "outputFile": "Вывод: {{value0}}",
       "groupAgents": "Агенты",
       "groupMonitors": "Наблюдения",
       "groupShell": "Оболочка",
