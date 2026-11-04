@@ -8,7 +8,7 @@ import {
   routeNativeChatHref
 } from '../../../../shared/native-chat/native-chat-href-routing'
 import CommentMarkdown from './CommentMarkdown'
-import type { FileLinkExists } from './comment-markdown-native-chat-file-links'
+import type { FileLinkExists } from '../../../../shared/native-chat/native-chat-file-link-tree'
 
 const mocks = vi.hoisted(() => ({
   mermaid: vi.fn(() => {
