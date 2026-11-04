@@ -3,17 +3,18 @@ import { useHostProtocolGates } from '../components/host-protocol-gates-context'
 import { useHostClient } from './host-client-hooks'
 import type { RpcClient } from './rpc-client'
 import type { ConnectionState } from './types'
+import type { ServerHostDesktopReach } from '../worktree/server-workspaces'
 
 // WorkspaceRoute supplies server context; null means unreachable, absent means desktop routing.
-export const WorkspaceServerContext = createContext<
-  | {
-      client: RpcClient | null
-      state: ConnectionState
-      desktopCapabilities: readonly string[]
-      name?: string | null
-    }
-  | undefined
->(undefined)
+type WorkspaceServer = {
+  client: RpcClient | null
+  state: ConnectionState
+  desktopCapabilities: readonly string[]
+  name?: string | null
+  desktopReach?: ServerHostDesktopReach
+}
+
+export const WorkspaceServerContext = createContext<WorkspaceServer | undefined>(undefined)
 
 /** The route's host has the capability; a relayed route also needs the paired desktop to forward it. */
 export function useRouteCapability(capability: string): boolean {
@@ -28,11 +29,17 @@ export function useRouteCapability(capability: string): boolean {
 export function useWorkspaceClient(hostId: string | undefined): ReturnType<typeof useHostClient> & {
   /** The route's own paired host, which stays the phone's peer when a server executes the workspace. */
   pairedHostClient: RpcClient | null
+  pairedHostState: ConnectionState
+  /** The server that executes this workspace; undefined on desktop routing. */
+  workspaceServer: WorkspaceServer | undefined
 } {
   const host = useHostClient(hostId)
   const server = useContext(WorkspaceServerContext)
-  const pairedHostClient = host.client
-  return server === undefined
-    ? { ...host, pairedHostClient }
-    : { ...host, client: server.client, state: server.state, pairedHostClient }
+  const paired = {
+    ...host,
+    pairedHostClient: host.client,
+    pairedHostState: host.state,
+    workspaceServer: server
+  }
+  return server === undefined ? paired : { ...paired, client: server.client, state: server.state }
 }
