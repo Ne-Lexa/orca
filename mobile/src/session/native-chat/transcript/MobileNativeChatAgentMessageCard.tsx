@@ -1,6 +1,6 @@
-import { memo, useContext, useState, useRef, useLayoutEffect } from 'react'
+import { memo, useState, useRef, useLayoutEffect } from 'react'
 import { Pressable, Text, View } from 'react-native'
-import { ArrowUpRight, Bot, ChevronDown, ChevronUp } from 'lucide-react-native'
+import { Bot, ChevronDown, ChevronUp } from 'lucide-react-native'
 import type { NativeChatMessage } from '../../../../../src/shared/native-chat/native-chat-types'
 import type { AgentMessageSource } from '../../../../../src/shared/agent-session/agent-session-message-source'
 import { agentMessageSendersShown } from '../../../../../src/shared/agent-session/agent-session-message-source'
@@ -9,7 +9,6 @@ import {
   agentMessageHeading,
   agentMessageIsCompact,
   agentMessagePrimarySender,
-  agentMessageSenderCanOpen,
   agentMessageOverflows,
   agentMessageFoldLabel,
   agentMessageCanCopy,
@@ -26,11 +25,8 @@ import { useMobileTranslation } from '../../../i18n/use-mobile-translation'
 import { colors, spacing, pressedStyle } from '../../../theme/mobile-theme'
 import { styles } from './mobile-agent-message-card-styles'
 import { useMobileColorScheme } from '../../../theme/use-mobile-color-scheme'
-import {
-  MobileAgentMessageOpenContext,
-  useMobileAgentMessageName,
-  useMobileAgentMessageView
-} from './mobile-agent-message-context'
+import { useMobileAgentMessageView } from './mobile-agent-message-context'
+import { MobileAgentMessageSenders } from './MobileAgentMessageSenders'
 import { MobileNativeChatMessageTime } from './MobileNativeChatMessageTime'
 import { useMobileNativeChatDisclosure } from './mobile-native-chat-disclosure-store'
 import { CHAT_PROSE_SCALE } from './mobile-native-chat-message-styles'
@@ -98,7 +94,7 @@ function CompactAgentMessageCard({
         >
           {heading}
         </Text>
-        <Senders compact from={from} />
+        <MobileAgentMessageSenders compact from={from} />
         {agentMessageCanCopy(text) ? (
           <MobileSourceCopyButton
             text={text}
@@ -190,7 +186,7 @@ const PreviewAgentMessageCard = memo(function PreviewAgentMessageCard({
             <MobileNativeChatMessageTime timestamp={message.timestamp} fontScale={fontScale} />
           </View>
         </View>
-        <Senders from={from} />
+        <MobileAgentMessageSenders from={from} />
         {attachments}
         <View
           testID="agent-message-viewport"
@@ -275,93 +271,5 @@ function SenderAvatar({
         </View>
       ) : null}
     </View>
-  )
-}
-
-function Senders({ from, compact = false }: { from: AgentMessageSource; compact?: boolean }) {
-  const open = useContext(MobileAgentMessageOpenContext)
-  const t = useMobileTranslation()
-  const { shown, more } = agentMessageSendersShown(from)
-  const occurrences = new Map<string, number>()
-  return (
-    <View pointerEvents="box-none" style={[styles.senders, compact && styles.compactSenders]}>
-      {shown.length === 0 ? (
-        <Text
-          pointerEvents={compact ? 'none' : undefined}
-          numberOfLines={compact ? 1 : undefined}
-          style={styles.name}
-        >
-          {t('session.agentMessageAttribution.unnamedSender', 'an agent')}
-        </Text>
-      ) : null}
-      {shown.map((sender) => {
-        const identity = JSON.stringify(sender.party)
-        const occurrence = occurrences.get(identity) ?? 0
-        occurrences.set(identity, occurrence + 1)
-        return (
-          <SenderName
-            key={`${identity}:${occurrence}`}
-            sender={sender}
-            from={from}
-            open={open}
-            compact={compact}
-            shownCount={shown.length}
-          />
-        )
-      })}
-      {more > 0 ? (
-        <Text
-          pointerEvents={compact ? 'none' : undefined}
-          style={[styles.meta, compact && styles.compactMoreSenders]}
-        >
-          +{more}
-        </Text>
-      ) : null}
-    </View>
-  )
-}
-
-function SenderName({
-  sender,
-  from,
-  open,
-  compact,
-  shownCount
-}: {
-  compact: boolean
-  shownCount: number
-  sender: AgentMessageSource['senders'][number]
-  from: AgentMessageSource
-  open: React.ContextType<typeof MobileAgentMessageOpenContext>
-}) {
-  const t = useMobileTranslation()
-  const name = useMobileAgentMessageName(
-    sender,
-    t('session.agentMessageAttribution.unnamedSender', 'an agent')
-  )
-  const canOpen = open !== undefined && agentMessageSenderCanOpen(sender)
-  return (
-    <Pressable
-      disabled={!canOpen}
-      accessibilityRole={canOpen ? 'button' : undefined}
-      onPress={() => open?.(from, sender)}
-      pointerEvents={canOpen ? 'auto' : 'none'}
-      style={({ pressed }) => [
-        styles.sender,
-        compact && [styles.compactSender, { maxWidth: `${100 / shownCount}%` }],
-        pressed && pressedStyle
-      ]}
-    >
-      <Text numberOfLines={compact ? 1 : undefined} style={styles.name}>
-        {name}
-      </Text>
-      {canOpen ? (
-        <ArrowUpRight
-          size={14}
-          color={colors.textPrimary}
-          style={compact ? styles.compactSenderArrow : undefined}
-        />
-      ) : null}
-    </Pressable>
   )
 }
