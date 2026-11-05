@@ -5,6 +5,7 @@ import type {
   AlignType,
   Code,
   Nodes,
+  Paragraph,
   Parent,
   PhrasingContent,
   Root,
@@ -12,11 +13,22 @@ import type {
   Table
 } from 'mdast'
 import remend from 'remend'
+import { mobileMarkdownMath } from './mobile-markdown-math'
+import {
+  displayFormulas,
+  inlineMathNode,
+  mathBlockNode,
+  mathFenceNode,
+  withoutMath
+} from './mobile-markdown-math-nodes'
 import { normalizeMobileMarkdownPreviewHtml } from './mobile-markdown-preview-html'
 import { endLinkifyUrlsAtProsePunctuation } from './markdown-linkify-prose-boundary'
 
 // Match desktop CommonMark/GFM tables, strikethrough, autolinks, footnotes and CJK emphasis using phone-efficient parser.
-const markdown = new MarkdownIt({ html: true, linkify: true }).use(footnote).use(cjkFriendly)
+const markdown = new MarkdownIt({ html: true, linkify: true })
+  .use(footnote)
+  .use(cjkFriendly)
+  .use(mobileMarkdownMath)
 // Every href parses as a link, file: included; routeMarkdownHref decides what a tap opens.
 markdown.validateLink = () => true
 endLinkifyUrlsAtProsePunctuation(markdown.linkify)
@@ -86,6 +98,8 @@ function phrasing(
       nodes.push({ type: 'html', value: token.content })
     } else if (token.type === 'image') {
       nodes.push({ type: 'image', url: token.attrGet('src') ?? '', alt: token.content || null })
+    } else if (token.type === 'math_inline') {
+      nodes.push(inlineMathNode(token))
     } else if (token.type === 'footnote_ref') {
       const label = String(token.meta?.label ?? '')
       nodes.push({ type: 'footnoteReference', identifier: label, label })
@@ -96,7 +110,11 @@ function phrasing(
       const before = previous?.type === 'text' ? previous.value.slice(-1) : ''
       const after = tokens[index]?.type === 'text' ? (tokens[index]?.content[0] ?? '') : ''
       if (token.type === 'link_open') {
-        nodes.push({ type: 'link', url: token.attrGet('href') ?? '', children: inner.nodes })
+        nodes.push({
+          type: 'link',
+          url: token.attrGet('href') ?? '',
+          children: withoutMath(inner.nodes)
+        })
       } else if (
         // Keep underscore emphasis literal beside path separators so a/__tests__/x.ts remains whole/tappable.
         token.markup.startsWith('_') &&
@@ -218,7 +236,10 @@ function toTree(tokens: readonly Token[], source: string): Root {
         break
       case 'fence':
       case 'code_block':
-        parent.children.push(codeNode(token, lines))
+        parent.children.push(mathFenceNode(codeNode(token, lines)))
+        break
+      case 'math_block':
+        parent.children.push(mathBlockNode(token))
         break
       case 'hr':
         parent.children.push({ type: 'thematicBreak' })
@@ -231,6 +252,8 @@ function toTree(tokens: readonly Token[], source: string): Root {
           const closed = stack.pop()
           if (closed?.type === 'listItem') {
             readTaskMarker(closed)
+          } else if (closed?.type === 'paragraph') {
+            displayFormulas(stack.at(-1)!, closed as Paragraph)
           }
         }
     }
@@ -273,7 +296,7 @@ function withLastBlockClosed(source: string, tokens: readonly Token[]): string {
   const lastBlock = tokens.findLast((token) => token.level === 0 && token.map)?.map?.[0] ?? 0
   const lines = source.split('\n')
   const tail = lines.slice(lastBlock).join('\n')
-  const closed = remend(tail, { linkMode: 'text-only' })
+  const closed = remend(tail, { linkMode: 'text-only', katex: false })
   return closed === tail ? source : [...lines.slice(0, lastBlock), closed].join('\n')
 }
 
