@@ -529,10 +529,8 @@ it('recovers two distinct rich submissions across remount/new input without late
 })
 
 import { createTestStore, TEST_REPO } from '@/store/slices/store-test-helpers'
-import {
-  useNativeChatPastedTextFile,
-  NATIVE_CHAT_PASTED_TEXT_FILE_THRESHOLD
-} from './use-native-chat-pasted-text-file'
+import { useNativeChatPastedTextFile } from './use-native-chat-pasted-text-file'
+import { NATIVE_CHAT_PASTED_TEXT_FILE_THRESHOLD } from '../../../../shared/native-chat/input/native-chat-long-paste'
 
 it.each<[reverse: boolean, firstAccepted: boolean, delayed?: boolean]>([
   [false, false],
