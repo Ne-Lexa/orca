@@ -204,13 +204,13 @@ export class RuntimePtyForegroundAgent {
   ): Promise<TerminalAgent | null | undefined> {
     const foregroundName = result.process
     const agent = recognizeAgentProcess(foregroundName)?.agent ?? null
-    if (!agent && !scanStillCurrent) {
-      return null
-    }
     // Native Claude's p_comm is its versions/<semver> binary; only a process-table scan reads its argv.
     if (agent || !foregroundName || !NATIVE_CLAUDE_VERSION_NAME.test(foregroundName)) {
       this.confirmedByPtyId.delete(ptyId)
       return agent
+    }
+    if (!scanStillCurrent) {
+      return null
     }
     const confirmed = this.confirmedByPtyId.get(ptyId)
     if (confirmed?.foregroundName === foregroundName) {
