@@ -107,6 +107,31 @@ describe('registerAppMenu', () => {
     )
   })
 
+  it.each(['darwin', 'linux', 'win32'] as const)(
+    'shows the default Cmd+, hint only on macOS and hides disabled bindings on %s',
+    (platform) => {
+      vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
+      const submenuLabel = platform === 'darwin' ? 'Orca' : 'File'
+      registerAppMenu(buildMenuOptions())
+      expect(getSubmenu(getTemplate(), submenuLabel)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: platform === 'darwin' ? 'Settings\t⌘,' : 'Settings'
+          })
+        ])
+      )
+
+      buildFromTemplateMock.mockClear()
+      registerAppMenu({
+        ...buildMenuOptions(),
+        getKeybindings: () => ({ 'app.settings': [] })
+      })
+      expect(getSubmenu(getTemplate(), submenuLabel)).toEqual(
+        expect.arrayContaining([expect.objectContaining({ label: 'Settings' })])
+      )
+    }
+  )
+
   it('toggles missing default-on appearance settings from visible to hidden', () => {
     expect(getNextDefaultOnAppearanceSettingValue(undefined)).toBe(false)
     expect(getNextDefaultOnAppearanceSettingValue(true)).toBe(false)
@@ -479,13 +504,14 @@ describe('registerAppMenu', () => {
     )
   })
 
-  it.runIf(isMac)('keeps the macOS app-named menu with Settings and quit roles', () => {
+  it('keeps the macOS app-named menu with Settings and quit roles', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     registerAppMenu(buildMenuOptions())
 
     const template = getTemplate()
     const appSubmenu = getSubmenu(template, 'Orca')
     const appLabels = appSubmenu.map((item) => item.label)
-    expect(appLabels).toEqual(expect.arrayContaining(['Check for Updates...', 'Settings']))
+    expect(appLabels).toEqual(expect.arrayContaining(['Check for Updates...', 'Settings\t⌘,']))
     expect(template.find((item) => item.label === 'File')).toBeUndefined()
     const helpLabels = getSubmenu(template, 'Help').map((item) => item.label)
     expect(helpLabels).toEqual([
