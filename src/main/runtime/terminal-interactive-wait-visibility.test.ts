@@ -6,6 +6,7 @@ import type {
 import { RuntimeMachineName } from './runtime-machine-name'
 import { OrcaRuntimeService } from './orca-runtime'
 import { makeTuiIdlePty } from './tui-idle-wait-test-harness'
+import type { TuiIdleHookTurn } from './tui-idle-hook-lane'
 import { readFileSync } from 'node:fs'
 import { makeAgentStatusStoreWiring } from './agent-status-store-wiring.test-fixture'
 import { join } from 'node:path'
@@ -580,6 +581,24 @@ describe('terminal wait ownership', () => {
     await vi.advanceTimersByTimeAsync(3050)
     expect(deliver).toHaveBeenCalledExactlyOnceWith(pty.ptyId)
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('delivers to a Claude whose hooks report a turn while child work keeps its screen busy', () => {
+    const pty = makeTuiIdlePty({
+      lastOutputAt: Date.now(),
+      lastAgentStatus: 'idle',
+      lastOscTitle: 'Fix the build',
+      launchAgent: 'claude'
+    })
+    const runtime = new OrcaRuntimeService()
+    runtime['terminalIdentity'].createPty(pty)
+    let turn: TuiIdleHookTurn | null = null
+    runtime['readTuiIdleHookTurnForPty'] = () => turn
+    expect(runtime['isAgentSettledForDelivery'](pty.ptyId)).toBe(false)
+    turn = { state: 'working', blockedReason: null }
+    expect(runtime['isAgentSettledForDelivery'](pty.ptyId)).toBe(true)
+    turn = { state: 'permission', blockedReason: 'agent-interactive-prompt' }
+    expect(runtime['isAgentSettledForDelivery'](pty.ptyId)).toBe(false)
   })
 
   it('cancels only the delivery recheck belonging to its runtime', async () => {

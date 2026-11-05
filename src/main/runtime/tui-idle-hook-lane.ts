@@ -54,6 +54,12 @@ export function hookLeadTurnState(
   return lead === 'done' || lead === 'working' ? lead : 'permission'
 }
 
+/** A turn the agent's own hooks report, open or ended, with no dialog or final frame due: its
+ *  composer is up and queues typed text, even while child work keeps the screen from going quiet. */
+export function hookTurnTakesQueuedInput(turn: TuiIdleHookTurn | null | undefined): boolean {
+  return !!turn && turn.state !== 'permission' && !turn.blockedReason && !turn.finalFrameAt
+}
+
 export type TuiIdleHookTurnRead = {
   agent: TuiAgent
   handles: Iterable<string>

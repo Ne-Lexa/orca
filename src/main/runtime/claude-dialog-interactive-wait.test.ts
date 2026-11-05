@@ -91,6 +91,17 @@ describe('hand-typed native Claude, whose process name is its version', () => {
     expect(counts.scans).toBe(1)
   })
 
+  it('keeps native Claude identified once its own title is up', async () => {
+    const { runtime } = await createTranscriptPane({
+      paneTitle: 'bash',
+      foregroundProcess: '2.1.310',
+      confirmedForegroundProcess: 'claude',
+      data: '\u001b]0;\u2733 Fix the build\u0007'
+    })
+    await runtime.refreshPtyForegroundAgentFromController(TRANSCRIPT_PANE_PTY_ID)
+    expect(runtime['ptysById'].get(TRANSCRIPT_PANE_PTY_ID)?.foregroundAgent).toBe('claude')
+  })
+
   it('never scans for a name that is not a version', async () => {
     const { runtime, handle, counts } = await typedPane({ foregroundProcess: 'vim' })
     await runtime.getTerminalInteractiveWait(handle)

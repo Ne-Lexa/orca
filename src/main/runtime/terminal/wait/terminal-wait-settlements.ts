@@ -18,6 +18,7 @@ import { TUI_IDLE_QUIESCENCE_MS } from '../../orca-runtime-postlude'
 import { USER_INPUT_HOLD_CAP_MS } from '../../claude-open-dialog-hold'
 import { detectTerminalComposerDraft } from '../../../../shared/terminal/input/terminal-composer-draft'
 import { isMailboxTerminalTakingInput } from '../../orchestration/mailbox-owner'
+import { hookTurnTakesQueuedInput } from '../../tui-idle-hook-lane'
 
 import type { OrcaRuntimeWithResolveWaiter } from '../../orca-runtime-resolve-waiter'
 
@@ -122,7 +123,7 @@ export abstract class OrcaRuntimeWithResolveExitWaiters extends OrcaRuntimeWithB
     this.deliveryRecheckTimersByPtyId.set(ptyId, timer)
   }
 
-  /** Pointer plus Enter takes the waits' readiness ranking, plus a working verdict: agents queue or
+  /** Pointer plus Enter takes the waits' readiness ranking, plus working and hooked turns: agents queue or
    *  steer text sent mid-turn, so only dialogs, drafts and unsettled terminals hold mail. Callers
    *  separately require live status evidence. */
   protected isAgentSettledForDelivery(ptyId: string): boolean {
@@ -136,9 +137,13 @@ export abstract class OrcaRuntimeWithResolveExitWaiters extends OrcaRuntimeWithB
     // Why no blocked reader: a refusal here re-arms a recheck that a lingering tail prompt
     // would spin, so delivery keeps its own, blocked-blind, reading of the same ranking.
     const verdict = evaluateTuiIdle({ ...evidence, readTailBlockedReason: () => null })
+    // Delivery needs no quiet: a hooked turn left pending by repainting child work still queues text.
+    const queueSafe =
+      verdict.kind === 'working' ||
+      (verdict.kind === 'pending' && hookTurnTakesQueuedInput(evidence.readHookTurn?.()))
     // The ranking vetoes overlays only on ready verdicts; an overlay refuses input mid-turn too.
     // Only a recognized agent queues mid-turn text; an unknown program would read it as stdin.
-    return verdict.kind === 'working'
+    return queueSafe
       ? !!this.getPaneTerminalAgent(ptyId) && evidence.readScreenInputVeto() !== true
       : isTuiIdleReadyVerdict(verdict)
   }
