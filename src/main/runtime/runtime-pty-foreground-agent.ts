@@ -168,7 +168,11 @@ export class RuntimePtyForegroundAgent {
     // A pane already showing agent status refreshes on its next transition, so a scanned identity
     // cannot outlive the agent the way a titleless dialog's can.
     const agent = await this.recognizeRead(ptyId, result, pty.lastAgentStatus !== null)
-    if (agent === undefined || pty.foregroundAgent === agent) {
+    // A transition during the scan asks again; this older identity could outlive its agent.
+    const superseded =
+      this.deps.getPty(ptyId) !== pty ||
+      (this.refreshes.get(ptyId)?.requestedAfterTitleObservation ?? afterTitle) > afterTitle
+    if (agent === undefined || superseded || pty.foregroundAgent === agent) {
       return false
     }
     pty.foregroundAgent = agent
