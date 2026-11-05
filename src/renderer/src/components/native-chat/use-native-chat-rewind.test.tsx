@@ -3,20 +3,16 @@ import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const toastError = vi.hoisted(() => vi.fn())
-vi.mock('sonner', () => ({ toast: { error: toastError } }))
+vi.mock('sonner', () => ({ toast: { error: toastError, message: vi.fn() } }))
 
 import { AGENT_SESSION_REWIND_REASONS } from '../../../../shared/agent-session/lifecycle/agent-session-rewind'
 import { EMPTY_STRUCTURED_AGENT_SESSION } from '../../../../shared/agent-session/structured-agent-session-reducer'
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session/journal/agent-session-journal-types'
 import type { NativeChatMessage } from '../../../../shared/native-chat/native-chat-types'
-import { NATIVE_CHAT_REWIND_RESET_TIMEOUT_MS, useNativeChatRewind } from './use-native-chat-rewind'
-import { nativeChatRowOffersRewind } from './native-chat-rewind-eligibility'
-import {
-  nativeChatRewindPendingCopy,
-  nativeChatRewindReasonCopy,
-  nativeChatRewindReturnedUnknownCopy,
-  nativeChatRewindTimeoutCopy
-} from './native-chat-rewind-copy'
+import { AGENT_SESSION_REWIND_RESET_TIMEOUT_MS } from '../../../../shared/agent-session/lifecycle/agent-session-rewind-request'
+import { useNativeChatRewind } from './use-native-chat-rewind'
+import { nativeChatRowOffersRewind } from '../../../../shared/native-chat/native-chat-rewind-eligibility'
+import { nativeChatRewindReasonCopy, sayNativeChatRewind } from './native-chat-rewind-copy'
 import {
   parseAgentSessionWriteFailure,
   type AgentSessionWriteFailure
@@ -180,10 +176,10 @@ describe('structured chat rewind', () => {
     })
     expect(view.result.current.pending).toBe(true)
     expect(view.result.current.blockedRef.current).toBe(true)
-    expect(view.result.current.disabledReason).toBe(nativeChatRewindPendingCopy())
+    expect(view.result.current.disabledReason).toBe(sayNativeChatRewind('pending'))
     // The host's latch covers its own in-flight work; it does not relabel ours.
     view.rerender({ ...props, hostBlockedReason: 'outcome-unknown' })
-    expect(view.result.current.disabledReason).toBe(nativeChatRewindPendingCopy())
+    expect(view.result.current.disabledReason).toBe(sayNativeChatRewind('pending'))
     await act(async () => {
       view.rerender({ ...props, state: { ...props.state, epoch: 'new', items: [] } })
       response.resolve(done)
@@ -193,15 +189,34 @@ describe('structured chat rewind', () => {
     expect(view.result.current.blockedRef.current).toBe(false)
   })
 
+  it("holds only its own chat's sends when the view moves to another chat mid-rewind", async () => {
+    const props = input(),
+      response = deferred<typeof done>()
+    props.send.mockReturnValue(response.promise)
+    const view = render(props)
+    let request!: Promise<void>
+    await act(async () => {
+      request = view.result.current.request('user', async () => true)
+    })
+    view.rerender({ ...props, sessionId: 'other' })
+    expect(view.result.current.disabledReason).toBeNull()
+    expect(view.result.current.admitsSend()).toBe(true)
+    view.rerender(props)
+    expect(view.result.current.admitsSend()).toBe(false)
+    await act(async () => {
+      view.rerender({ ...props, state: { ...props.state, epoch: 'new', items: [] } })
+      response.resolve(done)
+      await request
+    })
+  })
+
   it("lets the host's in-doubt latch disable only the action, never sending", async () => {
     const props: Input = { ...input(), hostBlockedReason: 'outcome-unknown' }
     const view = render(props)
     expect(view.result.current.disabledReason).toBe(nativeChatRewindReasonCopy('outcome-unknown'))
     expect(view.result.current.blockedRef.current).toBe(false)
     expect(view.result.current.pending).toBe(false)
-    const run = vi.fn()
-    view.result.current.unlessBlocked(run)()
-    expect(run).toHaveBeenCalledOnce()
+    expect(view.result.current.admitsSend()).toBe(true)
     const confirm = vi.fn()
     await act(() => view.result.current.request('user', confirm))
     expect(confirm).not.toHaveBeenCalled()
@@ -359,13 +374,13 @@ describe('structured chat rewind', () => {
       const view = render(props)
       await act(() => view.result.current.request('user', async () => true))
       expect(view.result.current.blockedRef.current).toBe(true)
-      await act(() => vi.advanceTimersByTimeAsync(NATIVE_CHAT_REWIND_RESET_TIMEOUT_MS - 1))
+      await act(() => vi.advanceTimersByTimeAsync(AGENT_SESSION_REWIND_RESET_TIMEOUT_MS - 1))
       expect(view.result.current.pending).toBe(true)
       await act(() => vi.advanceTimersByTimeAsync(1))
       expect(view.result.current.pending).toBe(false)
       expect(view.result.current.blockedRef.current).toBe(false)
-      expect(toastError).toHaveBeenCalledExactlyOnceWith(nativeChatRewindTimeoutCopy())
-      await act(() => vi.advanceTimersByTimeAsync(NATIVE_CHAT_REWIND_RESET_TIMEOUT_MS))
+      expect(toastError).toHaveBeenCalledExactlyOnceWith(sayNativeChatRewind('timeout'))
+      await act(() => vi.advanceTimersByTimeAsync(AGENT_SESSION_REWIND_RESET_TIMEOUT_MS))
       expect(toastError).toHaveBeenCalledOnce()
     } finally {
       vi.useRealTimers()
@@ -394,7 +409,7 @@ describe('structured chat rewind', () => {
           view.rerender({ ...props, isVisible: false })
           view.rerender({ ...props, isVisible: true })
         }
-        await act(() => vi.advanceTimersByTimeAsync(NATIVE_CHAT_REWIND_RESET_TIMEOUT_MS))
+        await act(() => vi.advanceTimersByTimeAsync(AGENT_SESSION_REWIND_RESET_TIMEOUT_MS))
         expect(view.result.current.pending).toBe(false)
         expect(view.result.current.blockedRef.current).toBe(false)
         expect(toastError).not.toHaveBeenCalled()
@@ -445,8 +460,8 @@ describe('structured chat rewind', () => {
       expect(view.result.current.disabledReason).toBeNull()
       expect(readNativeChatDraftCache('pane')).toContain('text of user')
       expect(onMessageReturned).toHaveBeenCalledOnce()
-      expect(toastError).toHaveBeenCalledExactlyOnceWith(nativeChatRewindReturnedUnknownCopy())
-      expect(nativeChatRewindReturnedUnknownCopy()).not.toContain('blocked')
+      expect(toastError).toHaveBeenCalledExactlyOnceWith(sayNativeChatRewind('returned-unknown'))
+      expect(sayNativeChatRewind('returned-unknown')).not.toContain('blocked')
     }
   )
 
