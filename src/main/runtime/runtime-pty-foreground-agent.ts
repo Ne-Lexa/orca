@@ -165,14 +165,16 @@ export class RuntimePtyForegroundAgent {
     if (!result || result.controller !== this.deps.getController() || !result.available) {
       return false
     }
-    // A pane already showing agent status refreshes on its next transition, so a scanned identity
-    // cannot outlive the agent the way a titleless dialog's can.
-    const agent = await this.recognizeRead(ptyId, result, pty.lastAgentStatus !== null)
-    // A transition during the scan asks again; this older identity could outlive its agent.
-    const superseded =
-      this.deps.getPty(ptyId) !== pty ||
-      (this.refreshes.get(ptyId)?.requestedAfterTitleObservation ?? afterTitle) > afterTitle
-    if (agent === undefined || superseded || pty.foregroundAgent === agent) {
+    // Scan only a pane showing agent status: its next transition refreshes it, so a scanned identity
+    // cannot outlive the agent the way a titleless dialog's can. A transition during the scan asks again.
+    const scanStillCurrent =
+      pty.lastAgentStatus === null
+        ? null
+        : () =>
+            this.deps.getPty(ptyId) === pty &&
+            (this.refreshes.get(ptyId)?.requestedAfterTitleObservation ?? afterTitle) <= afterTitle
+    const agent = await this.recognizeRead(ptyId, result, scanStillCurrent)
+    if (agent === undefined || pty.foregroundAgent === agent) {
       return false
     }
     pty.foregroundAgent = agent
@@ -191,18 +193,18 @@ export class RuntimePtyForegroundAgent {
     if (!result || result.controller !== this.deps.getController() || !result.available) {
       return null
     }
-    return (await this.recognizeRead(ptyId, result, true)) ?? null
+    return (await this.recognizeRead(ptyId, result, () => true)) ?? null
   }
 
-  /** Undefined when the controller changed during the confirming scan. */
+  /** `scanStillCurrent` null skips the version-name scan; undefined when the scan's answer went stale. */
   private async recognizeRead(
     ptyId: string,
     result: PtyForegroundProcessRead,
-    confirmVersionName: boolean
+    scanStillCurrent: (() => boolean) | null
   ): Promise<TerminalAgent | null | undefined> {
     const foregroundName = result.process
     const agent = recognizeAgentProcess(foregroundName)?.agent ?? null
-    if (!agent && !confirmVersionName) {
+    if (!agent && !scanStillCurrent) {
       return null
     }
     // Native Claude's p_comm is its versions/<semver> binary; only a process-table scan reads its argv.
@@ -220,7 +222,7 @@ export class RuntimePtyForegroundAgent {
     }
     const confirmedAgent =
       recognizeAgentProcess(await this.confirm(result.controller, ptyId))?.agent ?? null
-    if (result.controller !== this.deps.getController()) {
+    if (result.controller !== this.deps.getController() || !scanStillCurrent()) {
       return undefined
     }
     // Only a recognized agent is kept, so a "not an agent" verdict is rescanned on the next read.

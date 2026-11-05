@@ -121,7 +121,7 @@ describe('hand-typed native Claude, whose process name is its version', () => {
         })
     }
     const tracker = new RuntimePtyForegroundAgent({
-      // SAFETY: the tracker calls only these two controller methods.
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the tracker calls only these two controller methods.
       getController: () => controller as unknown as RuntimePtyController,
       getPty: () => pty,
       touchSnapshot: () => {},
